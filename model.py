@@ -40,7 +40,7 @@ class Model:
     - getMSE(test): Calculates the mean squared error for the model's predictions.
     """
 
-    def __init__(self, ratings: pd.DataFrame, k=30, preprocessed_users_file_name="./data/usersTest.csv", users=None, log = False):
+    def __init__(self, ratings: pd.DataFrame, k=16, preprocessed_users_file_name="./data/usersTest.csv", users=None, log = False):
         """
         Initializes a Movie Recommendation System model.
 
@@ -186,7 +186,10 @@ class Model:
             printProgressBar(len(selected_genres), len(selected_genres), prefix="Calculating genres mean:", suffix="Complete", length=50)
         return users
 
-    
+    def _setCluster(self):
+        self.clusters = pd.merge(self.ratings[["userId","movieId","rating"]], self.users[['userId', 'cluster']], on='userId')
+        self.clusters = self.clusters.groupby(['cluster', 'movieId']).mean()
+
     def clusterUsers(self):
         """
         Performs user clustering using K-means algorithm.
@@ -196,8 +199,7 @@ class Model:
         usersCluster = kmeans.fit(self.users.drop('userId', axis=1))
         self.users['cluster'] = usersCluster.labels_
 
-        self.clusters = pd.merge(self.ratings[["userId","movieId","rating"]], self.users[['userId', 'cluster']], on='userId')
-        self.clusters = self.clusters.groupby(['cluster', 'movieId']).mean()
+        self._setCluster()
 
     def predict(self, userID, movieID):
         """
@@ -212,6 +214,8 @@ class Model:
         """
         if "cluster" not in self.users.columns:
             raise ValueError("Model has not been fitted.")
+        if self.clusters is None:
+            self._setCluster()
         clusterResult = self.predictByCLuster(userID, movieID)
         if not np.isnan(clusterResult):
             return clusterResult
@@ -293,4 +297,4 @@ class Model:
         """
         tqdm.pandas()
         test["prediction"] = test.progress_apply(lambda x: self.predict(x["userId"], x["movieId"]), axis=1)
-        return mean_squared_error(y_true = test.rating/5, y_pred = test.prediction/5)
+        return mean_squared_error(y_true = test.rating, y_pred = test.prediction)
